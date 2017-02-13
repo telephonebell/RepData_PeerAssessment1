@@ -1,25 +1,159 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "PGA Project 1"
+output: html_document
 ---
 
+```{r setup, include = TRUE,message = FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE)
+```
 
-## Loading and preprocessing the data
-
-
-
-## What is mean total number of steps taken per day?
-
+# Loading and preprocessing the data  
 
 
-## What is the average daily activity pattern?
+```{r, echo = TRUE, include = TRUE, eval = TRUE, message = FALSE}
+library(lubridate)
+library(chron)
+
+setwd("C:/Users/silly/Desktop/coursera/Coursera data intro R notes/coursera 5/")
+rawdat <- read.csv("activity.csv")
+```
+
+# What is mean total number of steps taken per day?  
+
+### aggregate data by date (a date stamp uniquely corresponds to a day,  
+### so the desired per-day statistics can be gathered from such an aggregate).  
+
+```{r, echo = TRUE, include = TRUE, eval = TRUE, message = FALSE, fig.path = 'figure/'}
+bydate <- data.frame(cbind(rawdat$date,rawdat$steps))
+names(bydate) <- c("date","steps")
+agg1 <- aggregate(bydate, by=list(bydate$date), FUN=sum, na.rm=TRUE)
+hist(agg1$steps,xlab = "Number of steps",
+    main = "histogram of the total number of steps taken each day (NA's not imputed)")
+meanperday <- mean(agg1$steps, na.rm=TRUE)
+medianperday <- median(agg1$steps, na.rm=TRUE)
+totperday <- sum(agg1$steps, na.rm = TRUE)
+print("total of steps per day")
+print(totperday)
+print("mean value of steps per day")
+print(meanperday)
+print("median value of steps per day")
+print(medianperday)
+```
+
+# What is the average daily activity pattern?  
+
+### It is assumed the best conversion of seconds to 5 m intervals is to use binning,  
+### 5 m = 60 s/m * 5 m = 300 s, so, the 5m periods are defined by 300 second buckets.   
+### The day periods show a max of 2355 seconds, so there are 2355/300 = 8 bin values,  
+### 8 5-minute segments, arranged to display 0 to 40 minutes in 8 ticks.  
+
+```{r, echo = TRUE, include = TRUE, eval = TRUE, message = FALSE, fig.path = 'figure/'}
+val<-NULL
+binint <- rawdat
+
+for(i in (1 : dim(binint)[1])){
+    c <- binint[i,]$interval
+    if(0 <= c & c < 300){val = 1 * 5}
+    if(300 <= c & c < 600){val = 2 * 5}
+    if(600 <= c & c < 900){val = 3 * 5}
+    if(900 <= c & c < 1200){val = 4 * 5}
+    if(1200 <= c & c < 1500){val = 5 * 5}
+    if(1500 <= c & c < 1800){val = 6 * 5}
+    if(1800 <= c & c < 2100){val = 7 * 5}
+    if(2100 <= c & c < 2400){val = 8 * 5}
+    binint[i,]$interval <- val
+}
+
+agg2 <- aggregate(binint, by=list(binint$interval), FUN=mean, na.rm=TRUE)
+plot(agg2$interval, agg2$steps, type = "l",xlab = "minutes",
+     ylab = "average number of steps", 
+     main = "Time series of 5-minute intervals averaged across all days")
+print("which interval has the average maximum number of steps")
+print(which.max(agg2$steps) * 5)
+
+```
+# Imputing missing values:  
+### 1. The impact on mean and median is an increase for both from the non-  
+### imputed data set.  
+### 2. Imputing missing data increases the total daily number of steps.
+## How this works:  
+### This is done by replacing the NA with an average-step number  
+### for that interval, which occurs by looking up the average  
+### value for that interval on the aggregate table. This table  
+### contains averages over steps, aggregated by interval steps.  
+### A lookup to this table (for the corresponding step average),  
+### proceeds by passing the specific interval to look up on this  
+### table from the interval corresponding to the NA value on the  
+### main table. When a NA is detected in the main-table, the interval  
+### the NA occurs in, (on the main table) is passed to the interval-  
+### aggregated table, where the step-average, (recorded on the aggregate  
+### table) is returned, and assigned to the NA's storage location on the  
+### main table, replacing the NA with an estimated step-value. The  
+### 5 is divided out from the lookup-value passed, as the original table  
+### is also formatted to show the minute-range for that interval,  
+### and the aggregate table is indexed by bucket numbers 1-8...  
+### dividing out the 5 converts the minute-interval to bucket  
+### number (1-8), and thus the step-average can be referenced by the  
+### intervals (converted as such), from the originating table. This  
+### relationship appears below as a nested-table lookup, where the main  
+### table lookup is nested within the aggregate's bin index lookup, so that  
+### lookup values will correlate simultaneously across the aggregate and main  
+### tables, in one line. This provides a replacement average-steps for  
+### the NA value, referenced by the interval value in the NA's row  
+### (where the interval indexes the aggregate table average steps).  
+ 
+
+```{r, echo = TRUE, include = TRUE, eval = TRUE, message = FALSE, fig.path = 'figure/'}
+print("number of NA's")
+print(sum(is.na(binint$steps)))
+
+for(i in (1 : dim(binint)[1])){
+    if(is.na(binint[i,]$steps)){
+        binint[i,]$steps <- agg2[(binint[i,]$interval/5),]$steps        
+    }
+}
 
 
+new2dat <- data.frame(cbind(binint$steps,rawdat$date,rawdat$interval))
+names(new2dat) <- names(rawdat)
 
-## Imputing missing values
+
+agg3 <- aggregate(new2dat, by=list(new2dat$date), FUN=sum, na.rm=FALSE)
+barplot(agg3$steps, agg3$date, xlab="Days (60 total)",ylab="Steps number",
+        main = "time series of total of steps taken each day")
+hist(agg3$steps,xlab = "Number of steps",
+    main = "histogram of the total number of steps taken each day (NA's imputed)")
+print("mean total steps per day")
+print(mean(agg3$steps))
+print("median total steps per day")
+print(median(agg3$steps))
+```
+
+# Are there differences in activity patterns between weekdays and weekends?  
+
+```{r, echo = TRUE, include = TRUE, eval = TRUE, message = FALSE, fig.path = 'figure/'}
+wkndBool <- is.weekend(as.Date(rawdat$date))
+wknd <- NULL
+wknd[wkndBool] <- "weekend"
+wknd[!wkndBool] <- "weekday"
+    
+new3dat <- data.frame(cbind(new2dat,binint$interval,wknd))    
+
+wknd_dat <- new3dat[new3dat$wknd=="weekend",]
+wkdy_dat <- new3dat[new3dat$wknd=="weekday",]
+
+agg4 <- aggregate(wknd_dat, by=list(wknd_dat$binint.interval), FUN=mean, na.rm=TRUE)
+agg5 <- aggregate(wkdy_dat, by=list(wkdy_dat$binint.interval), FUN=mean, na.rm=TRUE)
+
+par(mfrow = c(2, 1))
+plot(agg4$binint.interval, agg4$steps, type = "l", 
+     xlab= "interval(min)", ylab = "number of steps", main = "average number of steps 
+     taken, averaged across all weekends ")
+
+plot(agg5$binint.interval, agg5$steps, type = "l", 
+     xlab= "interval(min)", ylab = "number of steps", main = "average number of steps 
+     taken, averaged across all weekdays ")
 
 
-
-## Are there differences in activity patterns between weekdays and weekends?
+dev.off()
+```
